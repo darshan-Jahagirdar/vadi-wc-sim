@@ -108,64 +108,114 @@ export function thirdsTable(state: SimState): ThirdRow[] {
 // Knockout bracket
 // ---------------------------------------------------------------------------
 
-// R32 layout. 1X = winner of group X, 2X = runner-up, T# = a ranked best-third.
-// Winners A–H meet thirds; winners I–L meet runners-up A–D; the remaining
-// runners-up meet each other. Top half (ties 1–8) and bottom half (9–16) feed
-// the two semi-finals.
-type RawSlot =
-  | { t: 'w'; g: GroupId }
-  | { t: 'r'; g: GroupId }
-  | { t: 'third'; i: number }
+// Official 2026 knockout bracket (FIFA match numbers 73–104). 1X = winner of
+// group X, 2X = runner-up, 3rd = one of the eight best third-placed teams.
+type Src =
+  | { k: 'w'; g: GroupId }
+  | { k: 'r'; g: GroupId }
+  | { k: 'third'; slot: number }
+  | { k: 'm'; id: string }
 
-const R32_LAYOUT: [RawSlot, RawSlot][] = [
-  [{ t: 'w', g: 'A' }, { t: 'third', i: 0 }],
-  [{ t: 'r', g: 'E' }, { t: 'r', g: 'J' }],
-  [{ t: 'w', g: 'C' }, { t: 'third', i: 1 }],
-  [{ t: 'w', g: 'I' }, { t: 'r', g: 'A' }],
-  [{ t: 'w', g: 'E' }, { t: 'third', i: 2 }],
-  [{ t: 'r', g: 'G' }, { t: 'r', g: 'L' }],
-  [{ t: 'w', g: 'G' }, { t: 'third', i: 3 }],
-  [{ t: 'w', g: 'K' }, { t: 'r', g: 'C' }],
-  [{ t: 'w', g: 'B' }, { t: 'third', i: 4 }],
-  [{ t: 'r', g: 'F' }, { t: 'r', g: 'I' }],
-  [{ t: 'w', g: 'D' }, { t: 'third', i: 5 }],
-  [{ t: 'w', g: 'J' }, { t: 'r', g: 'B' }],
-  [{ t: 'w', g: 'H' }, { t: 'third', i: 6 }],
-  [{ t: 'r', g: 'H' }, { t: 'r', g: 'K' }],
-  [{ t: 'w', g: 'F' }, { t: 'third', i: 7 }],
-  [{ t: 'w', g: 'L' }, { t: 'r', g: 'D' }],
+interface KOEntry {
+  id: string
+  round: Round
+  home: Src
+  away: Src
+}
+
+// The eight R32 third-place slots and the groups whose third-placed team may
+// fill each, per FIFA's allocation. A winner's own group never appears in its
+// slot, so nobody meets a group rival in the Round of 32.
+const THIRD_SLOTS: { allowed: GroupId[] }[] = [
+  { allowed: ['A', 'B', 'C', 'D', 'F'] }, // slot 0 -> M74 (1E)
+  { allowed: ['C', 'D', 'F', 'G', 'H'] }, // slot 1 -> M77 (1I)
+  { allowed: ['C', 'E', 'F', 'H', 'I'] }, // slot 2 -> M79 (1A)
+  { allowed: ['E', 'H', 'I', 'J', 'K'] }, // slot 3 -> M80 (1L)
+  { allowed: ['B', 'E', 'F', 'I', 'J'] }, // slot 4 -> M81 (1D)
+  { allowed: ['A', 'E', 'H', 'I', 'J'] }, // slot 5 -> M82 (1G)
+  { allowed: ['E', 'F', 'G', 'I', 'J'] }, // slot 6 -> M85 (1B)
+  { allowed: ['D', 'E', 'I', 'J', 'L'] }, // slot 7 -> M87 (1K)
 ]
 
-const THIRD_MATCH_WINNER_GROUPS: GroupId[] = ['A', 'C', 'E', 'G', 'B', 'D', 'H', 'F']
+// Every knockout tie in bracket (display) order: the R32 ties are arranged so
+// each adjacent pair feeds the same Round-of-16 tie, and so on up to the final.
+const KO_MATCHES: KOEntry[] = [
+  // Round of 32
+  { id: 'M74', round: 'R32', home: { k: 'w', g: 'E' }, away: { k: 'third', slot: 0 } },
+  { id: 'M77', round: 'R32', home: { k: 'w', g: 'I' }, away: { k: 'third', slot: 1 } },
+  { id: 'M73', round: 'R32', home: { k: 'r', g: 'A' }, away: { k: 'r', g: 'B' } },
+  { id: 'M75', round: 'R32', home: { k: 'w', g: 'F' }, away: { k: 'r', g: 'C' } },
+  { id: 'M83', round: 'R32', home: { k: 'r', g: 'K' }, away: { k: 'r', g: 'L' } },
+  { id: 'M84', round: 'R32', home: { k: 'w', g: 'H' }, away: { k: 'r', g: 'J' } },
+  { id: 'M81', round: 'R32', home: { k: 'w', g: 'D' }, away: { k: 'third', slot: 4 } },
+  { id: 'M82', round: 'R32', home: { k: 'w', g: 'G' }, away: { k: 'third', slot: 5 } },
+  { id: 'M76', round: 'R32', home: { k: 'w', g: 'C' }, away: { k: 'r', g: 'F' } },
+  { id: 'M78', round: 'R32', home: { k: 'r', g: 'E' }, away: { k: 'r', g: 'I' } },
+  { id: 'M79', round: 'R32', home: { k: 'w', g: 'A' }, away: { k: 'third', slot: 2 } },
+  { id: 'M80', round: 'R32', home: { k: 'w', g: 'L' }, away: { k: 'third', slot: 3 } },
+  { id: 'M86', round: 'R32', home: { k: 'w', g: 'J' }, away: { k: 'r', g: 'H' } },
+  { id: 'M88', round: 'R32', home: { k: 'r', g: 'D' }, away: { k: 'r', g: 'G' } },
+  { id: 'M85', round: 'R32', home: { k: 'w', g: 'B' }, away: { k: 'third', slot: 6 } },
+  { id: 'M87', round: 'R32', home: { k: 'w', g: 'K' }, away: { k: 'third', slot: 7 } },
+  // Round of 16
+  { id: 'M89', round: 'R16', home: { k: 'm', id: 'M74' }, away: { k: 'm', id: 'M77' } },
+  { id: 'M90', round: 'R16', home: { k: 'm', id: 'M73' }, away: { k: 'm', id: 'M75' } },
+  { id: 'M93', round: 'R16', home: { k: 'm', id: 'M83' }, away: { k: 'm', id: 'M84' } },
+  { id: 'M94', round: 'R16', home: { k: 'm', id: 'M81' }, away: { k: 'm', id: 'M82' } },
+  { id: 'M91', round: 'R16', home: { k: 'm', id: 'M76' }, away: { k: 'm', id: 'M78' } },
+  { id: 'M92', round: 'R16', home: { k: 'm', id: 'M79' }, away: { k: 'm', id: 'M80' } },
+  { id: 'M95', round: 'R16', home: { k: 'm', id: 'M86' }, away: { k: 'm', id: 'M88' } },
+  { id: 'M96', round: 'R16', home: { k: 'm', id: 'M85' }, away: { k: 'm', id: 'M87' } },
+  // Quarter-finals
+  { id: 'M97', round: 'QF', home: { k: 'm', id: 'M89' }, away: { k: 'm', id: 'M90' } },
+  { id: 'M98', round: 'QF', home: { k: 'm', id: 'M93' }, away: { k: 'm', id: 'M94' } },
+  { id: 'M99', round: 'QF', home: { k: 'm', id: 'M91' }, away: { k: 'm', id: 'M92' } },
+  { id: 'M100', round: 'QF', home: { k: 'm', id: 'M95' }, away: { k: 'm', id: 'M96' } },
+  // Semi-finals
+  { id: 'M101', round: 'SF', home: { k: 'm', id: 'M97' }, away: { k: 'm', id: 'M98' } },
+  { id: 'M102', round: 'SF', home: { k: 'm', id: 'M99' }, away: { k: 'm', id: 'M100' } },
+  // Final
+  { id: 'M104', round: 'F', home: { k: 'm', id: 'M101' }, away: { k: 'm', id: 'M102' } },
+]
 
-/** Assign the 8 qualified thirds to the 8 winner ties, avoiding a side meeting
- *  a team from its own group (a R32 rematch). */
-function assignThirds(
-  winnerGroups: GroupId[],
-  thirds: { group: GroupId; id: string }[],
-): (string | undefined)[] {
-  const res: (string | undefined)[] = new Array(winnerGroups.length).fill(undefined)
-  const used = new Array(thirds.length).fill(false)
+/** Assign the eight qualified thirds to the eight third-slots, respecting each
+ *  slot's allowed groups (a bipartite matching — FIFA's table guarantees one
+ *  exists). Falls back to a relaxed fill if somehow unmatched. */
+function assignThirds(qualified: { group: GroupId; id: string }[]): (string | undefined)[] {
+  const n = THIRD_SLOTS.length
+  const candidates = THIRD_SLOTS.map((slot) =>
+    qualified
+      .map((q, i) => ({ id: q.id, group: q.group, i }))
+      .filter((c) => slot.allowed.includes(c.group)),
+  )
+  const slotOrder = [...Array(n).keys()].sort((a, b) => candidates[a].length - candidates[b].length)
+  const result: (string | undefined)[] = new Array(n).fill(undefined)
+  const used = new Array(qualified.length).fill(false)
 
-  for (let i = 0; i < winnerGroups.length; i++) {
-    let pick = thirds.findIndex((t, j) => !used[j] && t.group !== winnerGroups[i])
-    if (pick === -1) pick = used.findIndex((u) => !u)
-    if (pick === -1) break
-    used[pick] = true
-    res[i] = thirds[pick].id
+  const solve = (k: number): boolean => {
+    if (k === n) return true
+    const s = slotOrder[k]
+    for (const c of candidates[s]) {
+      if (used[c.i]) continue
+      used[c.i] = true
+      result[s] = c.id
+      if (solve(k + 1)) return true
+      used[c.i] = false
+      result[s] = undefined
+    }
+    return false
   }
+  if (solve(0)) return result
 
-  for (let i = 0; i < winnerGroups.length; i++) {
-    const ti = thirds.find((x) => x.id === res[i])
-    if (ti && ti.group === winnerGroups[i]) {
-      for (let k = 0; k < winnerGroups.length; k++) {
-        if (k === i) continue
-        const tk = thirds.find((x) => x.id === res[k])
-        if (tk && tk.group !== winnerGroups[i] && ti.group !== winnerGroups[k]) {
-          ;[res[i], res[k]] = [res[k], res[i]]
-          break
-        }
-      }
+  // Fallback: fill remaining slots with whatever thirds are left.
+  const res: (string | undefined)[] = new Array(n).fill(undefined)
+  const used2 = new Array(qualified.length).fill(false)
+  for (let s = 0; s < n; s++) {
+    let pick = candidates[s].find((c) => !used2[c.i])?.i
+    if (pick == null) pick = used2.findIndex((u) => !u)
+    if (pick != null && pick >= 0) {
+      used2[pick] = true
+      res[s] = qualified[pick].id
     }
   }
   return res
@@ -175,47 +225,42 @@ export function buildBracket(state: SimState): Bracket {
   const winner = (g: GroupId) => orderOf(state, g)[0]
   const runner = (g: GroupId) => orderOf(state, g)[1]
 
-  const ranked = thirdsTable(state)
+  const qualified = thirdsTable(state)
     .filter((t) => t.qualifies)
     .map((t) => ({ group: t.group, id: t.team.id }))
-  const assignedThirds = assignThirds(THIRD_MATCH_WINNER_GROUPS, ranked)
-
-  const toSlot = (raw: RawSlot): Slot => {
-    if (raw.t === 'w') return { teamId: winner(raw.g), code: `1${raw.g}`, label: `Winner Group ${raw.g}` }
-    if (raw.t === 'r') return { teamId: runner(raw.g), code: `2${raw.g}`, label: `Runner-up Group ${raw.g}` }
-    return { teamId: assignedThirds[raw.i], code: '3rd', label: 'Best third-placed team' }
-  }
+  const thirdForSlot = assignThirds(qualified)
 
   const rounds: Record<Round, KOMatchView[]> = { R32: [], R16: [], QF: [], SF: [], F: [] }
   const winnerOf: Record<string, string | undefined> = {}
 
-  const resolve = (id: string, round: Round, home: Slot, away: Slot): KOMatchView => {
-    const view: KOMatchView = { id, round, home, away }
-    const w = state.ko[id]
+  const slotOf = (src: Src): Slot => {
+    switch (src.k) {
+      case 'w':
+        return { teamId: winner(src.g), code: `1${src.g}`, label: `Winner Group ${src.g}` }
+      case 'r':
+        return { teamId: runner(src.g), code: `2${src.g}`, label: `Runner-up Group ${src.g}` }
+      case 'third':
+        return { teamId: thirdForSlot[src.slot], code: '3rd', label: 'Best third-placed team' }
+      case 'm':
+        return { teamId: winnerOf[src.id], code: '', label: 'Winner' }
+    }
+  }
+
+  // KO_MATCHES is in dependency order, so a tie's feeder winners are already
+  // resolved by the time we reach it.
+  for (const entry of KO_MATCHES) {
+    const home = slotOf(entry.home)
+    const away = slotOf(entry.away)
+    const view: KOMatchView = { id: entry.id, round: entry.round, home, away }
+    const w = state.ko[entry.id]
     if (home.teamId && away.teamId && (w === home.teamId || w === away.teamId)) {
       view.winnerId = w
-      winnerOf[id] = w
+      winnerOf[entry.id] = w
     }
-    return view
+    rounds[entry.round].push(view)
   }
 
-  const fromMatch = (id: string): Slot => ({ teamId: winnerOf[id], code: '', label: 'Winner' })
-
-  R32_LAYOUT.forEach((m, i) => {
-    rounds.R32.push(resolve(`R32-${i + 1}`, 'R32', toSlot(m[0]), toSlot(m[1])))
-  })
-  for (let i = 0; i < 8; i++) {
-    rounds.R16.push(resolve(`R16-${i + 1}`, 'R16', fromMatch(`R32-${2 * i + 1}`), fromMatch(`R32-${2 * i + 2}`)))
-  }
-  for (let i = 0; i < 4; i++) {
-    rounds.QF.push(resolve(`QF-${i + 1}`, 'QF', fromMatch(`R16-${2 * i + 1}`), fromMatch(`R16-${2 * i + 2}`)))
-  }
-  for (let i = 0; i < 2; i++) {
-    rounds.SF.push(resolve(`SF-${i + 1}`, 'SF', fromMatch(`QF-${2 * i + 1}`), fromMatch(`QF-${2 * i + 2}`)))
-  }
-  rounds.F.push(resolve('F-1', 'F', fromMatch('SF-1'), fromMatch('SF-2')))
-
-  return { rounds, championId: winnerOf['F-1'] }
+  return { rounds, championId: winnerOf['M104'] }
 }
 
 // ---------------------------------------------------------------------------

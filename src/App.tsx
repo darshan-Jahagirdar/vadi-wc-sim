@@ -16,7 +16,7 @@ import { Flag } from './components/Flag'
 import { GroupStage } from './components/GroupStage'
 import { Knockout } from './components/Knockout'
 
-const STORAGE_KEY = 'wc2026-sim-v2'
+const STORAGE_KEY = 'wc2026-sim-v3'
 
 function loadState(): SimState {
   try {
