@@ -1,135 +1,82 @@
-import { GROUP_IDS, GroupId, TEAM_BY_ID } from '../data/teams'
-import {
-  Fixture,
-  GroupOutcome,
-  groupFixtures,
-  MatchResult,
-  Results,
-  Standing,
-  ThirdRow,
-} from '../lib/sim'
+import { GROUP_IDS, GroupId } from '../data/teams'
+import { GroupRow, SimState, ThirdRow, groupTable } from '../lib/sim'
 import { Flag } from './Flag'
 
 interface Props {
-  results: Results
-  standings: Record<GroupId, Standing[]>
+  state: SimState
   thirds: ThirdRow[]
-  onPick: (fixtureId: string, outcome: GroupOutcome) => void
+  onMove: (group: GroupId, index: number, dir: -1 | 1) => void
 }
 
-export function GroupStage({ results, standings, thirds, onPick }: Props) {
+export function GroupStage({ state, thirds, onMove }: Props) {
   return (
     <>
+      <p className="stage-hint">
+        Set where each nation finishes in its group — use the{' '}
+        <span className="kbd">▲</span> <span className="kbd">▼</span> arrows to reorder.
+        The top two go through automatically, and the best eight third-placed teams join them.
+      </p>
+
       <div className="groups-grid">
         {GROUP_IDS.map((g) => (
-          <GroupCard
-            key={g}
-            group={g}
-            standings={standings[g]}
-            results={results}
-            onPick={onPick}
-          />
+          <GroupCard key={g} group={g} rows={groupTable(state, g)} onMove={onMove} />
         ))}
       </div>
+
       <ThirdsPanel thirds={thirds} />
+
+      <div className="legend">
+        <span className="lg lg-q">Through to last 32</span>
+        <span className="lg lg-3">3rd — in the play-off race</span>
+        <span className="lg lg-out">Eliminated</span>
+      </div>
     </>
   )
 }
 
 function GroupCard({
   group,
-  standings,
-  results,
-  onPick,
+  rows,
+  onMove,
 }: {
   group: GroupId
-  standings: Standing[]
-  results: Results
-  onPick: (fixtureId: string, outcome: GroupOutcome) => void
+  rows: GroupRow[]
+  onMove: (group: GroupId, index: number, dir: -1 | 1) => void
 }) {
-  const fixtures = groupFixtures(group)
   return (
     <section className="group-card">
       <div className="group-head">
         <span className="gtag">Group {group}</span>
       </div>
 
-      <table className="standings">
-        <thead>
-          <tr>
-            <th></th>
-            <th className="ta-l">Team</th>
-            <th>Pl</th>
-            <th>GD</th>
-            <th>Pts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {standings.map((s) => (
-            <tr key={s.team.id} className={`q${s.rank}`}>
-              <td className="pos">{s.rank}</td>
-              <td className="ta-l">
-                <span className="team">
-                  <Flag code={s.team.flag} />
-                  <span className="tn">{s.team.name}</span>
-                </span>
-              </td>
-              <td>{s.played}</td>
-              <td>{s.gd > 0 ? `+${s.gd}` : s.gd}</td>
-              <td className="pts">{s.points}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div className="fixtures">
-        {fixtures.map((fx) => (
-          <FixtureRow key={fx.id} fx={fx} result={results[fx.id]} onPick={onPick} />
+      <ol className="rank-list">
+        {rows.map((row, i) => (
+          <li key={row.team.id} className={`rank-row q${row.rank}`}>
+            <span className="pos">{row.rank}</span>
+            <Flag code={row.team.flag} />
+            <span className="tn">{row.team.name}</span>
+            <span className="movers">
+              <button
+                className="mv"
+                aria-label={`Move ${row.team.name} up`}
+                disabled={i === 0}
+                onClick={() => onMove(group, i, -1)}
+              >
+                ▲
+              </button>
+              <button
+                className="mv"
+                aria-label={`Move ${row.team.name} down`}
+                disabled={i === rows.length - 1}
+                onClick={() => onMove(group, i, 1)}
+              >
+                ▼
+              </button>
+            </span>
+          </li>
         ))}
-      </div>
+      </ol>
     </section>
-  )
-}
-
-function FixtureRow({
-  fx,
-  result,
-  onPick,
-}: {
-  fx: Fixture
-  result: MatchResult | undefined
-  onPick: (fixtureId: string, outcome: GroupOutcome) => void
-}) {
-  const home = TEAM_BY_ID[fx.home]
-  const away = TEAM_BY_ID[fx.away]
-
-  let sel: GroupOutcome | undefined
-  if (result && result.kind === 'group') {
-    sel = result.home > result.away ? 'home' : result.home < result.away ? 'away' : 'draw'
-  }
-
-  const cls = (side: GroupOutcome) =>
-    `side ${side}` + (sel === side ? ' win' : sel ? ' lose' : '')
-
-  return (
-    <div className="fixture">
-      <button className={cls('home')} onClick={() => onPick(fx.id, 'home')}>
-        <span className="tname">{home.name}</span>
-        <Flag code={home.flag} />
-      </button>
-      <button
-        className={`draw${sel === 'draw' ? ' sel' : ''}`}
-        onClick={() => onPick(fx.id, 'draw')}
-        title="Draw"
-        aria-label="Draw"
-      >
-        ×
-      </button>
-      <button className={cls('away')} onClick={() => onPick(fx.id, 'away')}>
-        <Flag code={away.flag} />
-        <span className="tname">{away.name}</span>
-      </button>
-    </div>
   )
 }
 
@@ -137,17 +84,19 @@ function ThirdsPanel({ thirds }: { thirds: ThirdRow[] }) {
   return (
     <section className="thirds-panel">
       <h2>
-        Race for the best third-placed teams
+        Best third-placed teams
         <span className="hint">top 8 advance</span>
       </h2>
+      <p className="thirds-note">
+        Ranked by seeding to decide which third-placed sides fill the last eight spots.
+      </p>
       <div className="thirds-grid">
         {thirds.map((t) => (
           <div key={t.group} className={`third-row ${t.qualifies ? 'in' : 'out'}`}>
             <span className="ord">{t.order}</span>
-            <Flag code={t.standing.team.flag} />
-            <span className="tn">{t.standing.team.name}</span>
+            <Flag code={t.team.flag} />
+            <span className="tn">{t.team.name}</span>
             <span className="grp">Grp {t.group}</span>
-            <span className="pts">{t.standing.points} pts</span>
           </div>
         ))}
       </div>

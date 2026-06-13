@@ -1,54 +1,52 @@
 import { useEffect, useMemo, useState } from 'react'
 import confetti from 'canvas-confetti'
-import { HOSTS, TEAM_BY_ID } from './data/teams'
+import { GroupId, HOSTS, TEAM_BY_ID } from './data/teams'
 import {
-  allStandings,
-  autoFillGroups,
-  autoFillRest,
+  autoFillKO,
   buildBracket,
-  GroupOutcome,
-  groupProgress,
+  EMPTY_STATE,
   koProgress,
-  Results,
-  setGroupOutcome,
-  setKOWinner,
-  simulateEverything,
+  moveTeam,
+  randomiseAll,
+  setKO,
+  SimState,
   thirdsTable,
 } from './lib/sim'
 import { Flag } from './components/Flag'
 import { GroupStage } from './components/GroupStage'
 import { Knockout } from './components/Knockout'
 
-const STORAGE_KEY = 'wc2026-sim-results'
+const STORAGE_KEY = 'wc2026-sim-v2'
 
-function loadResults(): Results {
+function loadState(): SimState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw) as Results
+    if (raw) {
+      const parsed = JSON.parse(raw) as SimState
+      if (parsed && typeof parsed === 'object' && parsed.groups && parsed.ko) return parsed
+    }
   } catch {
     /* ignore */
   }
-  return {}
+  return EMPTY_STATE
 }
 
 type Tab = 'groups' | 'knockout'
 
 export default function App() {
-  const [results, setResults] = useState<Results>(loadResults)
+  const [state, setState] = useState<SimState>(loadState)
   const [tab, setTab] = useState<Tab>('groups')
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(results))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch {
       /* ignore */
     }
-  }, [results])
+  }, [state])
 
-  const standings = useMemo(() => allStandings(results), [results])
-  const bracket = useMemo(() => buildBracket(results), [results])
-  const thirds = useMemo(() => thirdsTable(results), [results])
-  const gp = useMemo(() => groupProgress(results), [results])
+  const bracket = useMemo(() => buildBracket(state), [state])
+  const thirds = useMemo(() => thirdsTable(state), [state])
   const kp = useMemo(() => koProgress(bracket), [bracket])
 
   const championId = bracket.championId
@@ -58,27 +56,26 @@ export default function App() {
     if (championId) fireConfetti()
   }, [championId])
 
-  const pickGroup = (fixtureId: string, outcome: GroupOutcome) =>
-    setResults((r) => setGroupOutcome(r, fixtureId, outcome))
+  const onMove = (group: GroupId, index: number, dir: -1 | 1) =>
+    setState((s) => moveTeam(s, group, index, dir))
 
-  const pickKO = (matchId: string, winnerId: string, homeId: string, awayId: string) =>
-    setResults((r) => setKOWinner(r, matchId, winnerId, homeId, awayId))
+  const onPick = (matchId: string, winnerId: string) =>
+    setState((s) => setKO(s, matchId, winnerId))
 
   const handleAutoFill = () => {
-    setResults((r) => autoFillRest(r))
+    setState((s) => autoFillKO(s))
     setTab('knockout')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
   const handleRandomize = () => {
-    setResults(simulateEverything())
+    setState(randomiseAll())
     setTab('knockout')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
   const handleReset = () => {
-    setResults({})
+    setState(EMPTY_STATE)
     setTab('groups')
   }
-  const handleSeedGroups = () => setResults((r) => autoFillGroups(r))
 
   return (
     <div className="app">
@@ -125,8 +122,7 @@ export default function App() {
         </div>
 
         <div className="progress">
-          <ProgressBar label="Group stage" done={gp.done} total={gp.total} />
-          <ProgressBar label="Knockout" done={kp.done} total={kp.total} />
+          <ProgressBar label="Knockout ties" done={kp.done} total={kp.total} />
         </div>
 
         <div className="actions">
@@ -144,21 +140,16 @@ export default function App() {
 
       <main className="content">
         {tab === 'groups' ? (
-          <GroupStage
-            results={results}
-            standings={standings}
-            thirds={thirds}
-            onPick={pickGroup}
-          />
+          <GroupStage state={state} thirds={thirds} onMove={onMove} />
         ) : (
-          <Knockout bracket={bracket} onPick={pickKO} onSeed={handleSeedGroups} />
+          <Knockout bracket={bracket} onPick={onPick} />
         )}
       </main>
 
       <footer className="footer">
         Unofficial fan-made predictor · 48 teams, 12 groups, real 2026 final-draw line-ups.
         <br />
-        Match outcomes are simulated from rough strength ratings — for fun, not forecasting.
+        Pick the group positions and knockout winners — or simulate it all for fun.
       </footer>
     </div>
   )
